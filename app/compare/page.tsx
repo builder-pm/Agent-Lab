@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Clock, Coins, Hash, AlertTriangle, CheckCircle, AlignCenterHorizontal } from "lucide-react";
@@ -31,7 +31,16 @@ interface AlignedRow {
     candidate: Step | null;
 }
 
+// Main page export wrapped in Suspense
 export default function ComparePage() {
+    return (
+        <Suspense fallback={<div className="h-full flex items-center justify-center font-mono animate-pulse">PREPARING_ARENA...</div>}>
+            <ComparePageContent />
+        </Suspense>
+    );
+}
+
+function ComparePageContent() {
     const searchParams = useSearchParams();
     const baseId = searchParams.get("base");
     const candidateId = searchParams.get("candidate");
@@ -55,7 +64,7 @@ export default function ComparePage() {
                 fetch(`/api/scenarios/${baseId}`),
                 fetch(`/api/scenarios/${candidateId}`)
             ]);
-            
+
             if (res1.ok && res2.ok) {
                 const b = await res1.json();
                 const c = await res2.json();
@@ -71,7 +80,7 @@ export default function ComparePage() {
     };
 
     if (loading) return <div className="h-full flex items-center justify-center font-mono animate-pulse">PREPARING_ARENA...</div>;
-    
+
     if (!baseId || !candidateId) {
         return (
             <div className="h-full flex flex-col items-center justify-center font-mono space-y-4">
@@ -112,8 +121,8 @@ export default function ComparePage() {
                 </div>
                 {!isSingleMode && (
                     <div className="text-xs font-mono text-zinc-500 flex items-center gap-2">
-                       <AlignCenterHorizontal size={14} /> 
-                       <span>{alignedSteps.length} STEPS (ALIGNED)</span>
+                        <AlignCenterHorizontal size={14} />
+                        <span>{alignedSteps.length} STEPS (ALIGNED)</span>
                     </div>
                 )}
             </header>
@@ -121,30 +130,30 @@ export default function ComparePage() {
             {/* Scoreboard */}
             <div className="bg-zinc-900 border-b border-zinc-800 p-4 shrink-0 font-mono text-xs">
                 <div className="max-w-6xl mx-auto grid grid-cols-3 gap-8">
-                    <MetricCard 
-                        label="LATENCY" 
-                        icon={<Clock size={14} />} 
-                        base={baseStats.latency / 1000} 
-                        candidate={isSingleMode ? 0 : candStats.latency / 1000} 
-                        unit="s" 
+                    <MetricCard
+                        label="LATENCY"
+                        icon={<Clock size={14} />}
+                        base={baseStats.latency / 1000}
+                        candidate={isSingleMode ? 0 : candStats.latency / 1000}
+                        unit="s"
                         invert={true}
                         single={isSingleMode}
                     />
-                    <MetricCard 
-                        label="TOTAL_COST" 
-                        icon={<Coins size={14} />} 
-                        base={baseStats.cost} 
-                        candidate={isSingleMode ? 0 : candStats.cost} 
-                        unit="$" 
+                    <MetricCard
+                        label="TOTAL_COST"
+                        icon={<Coins size={14} />}
+                        base={baseStats.cost}
+                        candidate={isSingleMode ? 0 : candStats.cost}
+                        unit="$"
                         invert={true}
                         single={isSingleMode}
                     />
-                    <MetricCard 
-                        label="TOKENS" 
-                        icon={<Hash size={14} />} 
-                        base={baseStats.tokens} 
-                        candidate={isSingleMode ? 0 : candStats.tokens} 
-                        unit="" 
+                    <MetricCard
+                        label="TOKENS"
+                        icon={<Hash size={14} />}
+                        base={baseStats.tokens}
+                        candidate={isSingleMode ? 0 : candStats.tokens}
+                        unit=""
                         invert={true}
                         single={isSingleMode}
                     />
@@ -167,7 +176,7 @@ export default function ComparePage() {
                     // DUAL COMPARISON MODE
                     <>
                         <div className="grid grid-cols-2 sticky top-0 z-10 border-b border-zinc-800">
-                             <div className="p-3 bg-zinc-950 text-center font-bold text-zinc-500 text-xs uppercase tracking-widest border-r border-zinc-800">
+                            <div className="p-3 bg-zinc-950 text-center font-bold text-zinc-500 text-xs uppercase tracking-widest border-r border-zinc-800">
                                 BASE RUN ({base.id.slice(-6)})
                             </div>
                             <div className="p-3 bg-zinc-900/50 text-center font-bold text-primary text-xs uppercase tracking-widest flex items-center justify-center gap-2">
@@ -190,11 +199,11 @@ export default function ComparePage() {
                                     </div>
                                     <div className="p-4 bg-zinc-900/10 min-w-0">
                                         {row.candidate ? (
-                                            <StepCard 
-                                                step={row.candidate} 
-                                                index={candidate.steps.indexOf(row.candidate)} 
-                                                isCandidate 
-                                                comparisonStep={row.base} 
+                                            <StepCard
+                                                step={row.candidate}
+                                                index={candidate.steps.indexOf(row.candidate)}
+                                                isCandidate
+                                                comparisonStep={row.base}
                                             />
                                         ) : (
                                             <div className="h-full flex items-center justify-center border-2 border-dashed border-zinc-900 rounded opacity-20 text-zinc-600 font-mono text-xs uppercase p-8">
@@ -224,15 +233,15 @@ function alignSteps(baseSteps: Step[], candSteps: Step[]): AlignedRow[] {
         const c = candSteps[j];
 
         // 1. End of list handling
-        if (!b) { 
+        if (!b) {
             aligned.push({ base: null, candidate: c });
-            j++; 
-            continue; 
+            j++;
+            continue;
         }
-        if (!c) { 
+        if (!c) {
             aligned.push({ base: b, candidate: null });
-            i++; 
-            continue; 
+            i++;
+            continue;
         }
 
         // 2. Direct Match
@@ -296,17 +305,17 @@ function diffWords(oldText: string, newText: string) {
     // ...
     // Better approach: Use a very simple LCS (Longest Common Subsequence) based diff.
     // For now, I'll use a simplified token matching.
-    
+
     // Fallback: If texts are vastly different, return whole newText as added.
     if (Math.abs(oldWords.length - newWords.length) > newWords.length / 2) {
-         return [{ type: 'changed', value: newText }];
+        return [{ type: 'changed', value: newText }];
     }
 
     // Since implementing a full Myers diff algorithm here is too verbose,
     // I will use a simple "highlight new content" approach if it's an append,
     // or just plain text if it's a total rewrite.
     // Wait, let's at least try to highlight exact matches vs non-matches.
-    
+
     return [{ type: 'normal', value: newText }]; // Placeholder to be replaced by render logic below
 }
 
@@ -344,10 +353,10 @@ function StepCard({ step, index, isCandidate, comparisonStep }: any) {
             <div className="flex justify-between items-center mb-2">
                 <div className="flex items-center gap-2">
                     <span className="text-zinc-500">#{index + 1}</span>
-                    <span className={cn("font-bold px-1.5 py-0.5 rounded text-[10px] uppercase", 
+                    <span className={cn("font-bold px-1.5 py-0.5 rounded text-[10px] uppercase",
                         step.agent === 'planner' ? 'bg-violet-500/20 text-violet-400' :
-                        step.agent === 'researcher' ? 'bg-cyan-500/20 text-cyan-400' :
-                        'bg-zinc-700 text-zinc-300'
+                            step.agent === 'researcher' ? 'bg-cyan-500/20 text-cyan-400' :
+                                'bg-zinc-700 text-zinc-300'
                     )}>
                         {step.agent}
                     </span>
@@ -373,17 +382,17 @@ function DiffView({ oldText, newText }: { oldText: string, newText: string }) {
     // Very basic word diff
     const oldWords = oldText.split(/(\s+)/);
     const newWords = newText.split(/(\s+)/);
-    
+
     // If drastically different, just show new text in green
     if (Math.abs(oldWords.length - newWords.length) > newWords.length * 0.8) {
-         return <span className="text-emerald-400 bg-emerald-950/30">{newText}</span>;
+        return <span className="text-emerald-400 bg-emerald-950/30">{newText}</span>;
     }
 
     // Basic heuristic: Iterate new words, if match old, render normal. If not, render green.
     // This is NOT a real diff (Myers), but "Show what is new".
     // Real diff is too complex for a single file snippet without libs.
     // So we will stick to: Highlighting lines that changed.
-    
+
     const lines = newText.split('\n');
     const oldLines = oldText.split('\n');
 

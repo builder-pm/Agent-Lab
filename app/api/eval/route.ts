@@ -1,41 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { evaluateStep, seedEvalPrerequisites } from '@/lib/evaluator';
+import { evaluateScenarioResult } from '@/lib/evaluator';
 import prisma from '@/lib/db';
 
 export async function POST(req: NextRequest) {
     try {
-        const { stepId, scenarioId, metrics } = await req.json();
+        const { scenarioId, judgeId, testCasePrompt, expectedOutput } = await req.json();
 
-        // Ensure metrics/judges are seeded
-        await seedEvalPrerequisites();
-
-        if (stepId) {
-            const results = [];
-            for (const metric of (metrics || ['Faithfulness', 'Relevancy'])) {
-                const res = await evaluateStep(stepId, metric);
-                if (res) results.push({ metric, ...res });
-            }
-            return NextResponse.json({ success: true, results });
+        if (!scenarioId) {
+            return NextResponse.json({ error: 'Missing scenarioId' }, { status: 400 });
         }
 
-        if (scenarioId) {
-            // Evaluate all steps in a scenario
-            const steps = await prisma.agentStep.findMany({
-                where: { scenarioId },
-                select: { id: true }
-            });
+        // Get or create a default judge if not provided
+        let judge = judgeId
+            ? await prisma.judge.findUnique({ where: { id: judgeId } })
+            : await prisma.judge.findFirst({ where: { type: 'LLM' } });
 
-            const allResults = [];
-            for (const step of steps) {
-                for (const metric of (metrics || ['Faithfulness', 'Relevancy'])) {
-                    const res = await evaluateStep(step.id, metric);
-                    if (res) allResults.push({ stepId: step.id, metric, ...res });
+        if (!judge) {
+            judge = await prisma.judge.create({
+                data: {
+                    name: 'Default LLM Judge',
+                    type: 'LLM',
+                    config: 'You are an AI judge. Grade the answer on a scale of 0.0 to 1.0.'
                 }
-            }
-            return NextResponse.json({ success: true, results: allResults });
+            });
         }
 
-        return NextResponse.json({ error: 'Missing stepId or scenarioId' }, { status: 400 });
+        const result = await evaluateScenarioResult(scenarioId, judge.id, testCasePrompt, expectedOutput);
+
+        if (!result) {
+            return NextResponse.json({ error: 'Evaluation failed - no valid scenario or steps found' }, { status: 400 });
+        }
+
+        return NextResponse.json({ success: true, result });
     } catch (error: any) {
         console.error('Eval API error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { evaluateStep, seedEvalPrerequisites } from '../lib/evaluator';
-import { createClient } from '@supabase/supabase-js';
+import { evaluateScenarioResult } from '../lib/evaluator';
 import dotenv from 'dotenv';
 
 // Load env vars from .env.local manually since we are running a script
@@ -11,11 +10,7 @@ const prisma = new PrismaClient();
 async function main() {
     console.log('🧪 Starting Local Evaluation Test...');
 
-    // 1. Seed Metrics
-    console.log('   Seeding metrics...');
-    await seedEvalPrerequisites();
-
-    // 2. Create a Dummy Scenario & Step
+    // 1. Create a Dummy Scenario & Step
     console.log('   Creating mock scenario...');
     const scenario = await prisma.scenario.create({
         data: {
@@ -36,9 +31,27 @@ async function main() {
     });
     console.log(`   ✅ Created Step ID: ${step.id}`);
 
+    // 2. Create or get a Judge
+    let judge = await prisma.judge.findFirst({ where: { type: 'LLM' } });
+    if (!judge) {
+        judge = await prisma.judge.create({
+            data: {
+                name: 'Default LLM Judge',
+                type: 'LLM',
+                config: 'You are an AI judge. Grade the answer on a scale of 0.0 to 1.0.'
+            }
+        });
+    }
+    console.log(`   ✅ Using Judge: ${judge.name}`);
+
     // 3. Run Evaluation
-    console.log('   🚀 Triggering Evaluation (Faithfulness)...');
-    const result = await evaluateStep(step.id, 'Faithfulness');
+    console.log('   🚀 Triggering Evaluation...');
+    const result = await evaluateScenarioResult(
+        scenario.id,
+        judge.id,
+        'What is the capital of France?',
+        'Paris is the capital of France'
+    );
 
     if (result) {
         console.log('\n   ✅ Evaluation Successful!');
@@ -46,7 +59,6 @@ async function main() {
         console.log(`   🎯 Score:     ${result.score}`);
         console.log(`   🤔 Reasoning: ${result.reasoning}`);
         console.log('   ----------------------------------------');
-        console.log('   (Check your Supabase "evaluation_results" table to see if it appeared there!)');
     } else {
         console.error('   ❌ Evaluation returned null.');
     }

@@ -6,7 +6,6 @@ import { supabase } from './supabase';
 const openrouter = createOpenAI({
     baseURL: 'https://openrouter.ai/api/v1',
     apiKey: process.env.OPENROUTER_API_KEY,
-    compatibility: 'compatible',
 });
 
 const DEFAULT_JUDGE_MODEL = 'google/gemini-2.0-flash-001';
@@ -52,7 +51,7 @@ export async function evaluateScenarioResult(scenarioId: string, judgeId: string
     } else {
         // LLM Judge
         const systemPrompt = judge.config || `You are an AI judge. Grade the answer on a scale of 0.0 to 1.0.`;
-        
+
         const userPrompt = `
 TEST CASE PROMPT: "${testCasePrompt || 'N/A'}"
 EXPECTED OUTPUT: "${expectedOutput || 'N/A'}"
@@ -69,7 +68,6 @@ Provide your response in JSON format: { "score": number, "reasoning": "string" }
                 model: openrouter.chat(DEFAULT_JUDGE_MODEL), // We use a fixed smart model to ACT as the judge
                 system: systemPrompt,
                 prompt: userPrompt,
-                responseFormat: { type: 'json' }
             });
 
             const res = JSON.parse(text) as EvalResult;
@@ -86,8 +84,8 @@ Provide your response in JSON format: { "score": number, "reasoning": "string" }
     // For simplicity, we just use a "General" metric or look one up.
     let metric = await prisma.evaluationMetric.findFirst({ where: { name: 'General' } });
     if (!metric) {
-        metric = await prisma.evaluationMetric.create({ 
-            data: { name: 'General', type: 'scale_1_5' } 
+        metric = await prisma.evaluationMetric.create({
+            data: { name: 'General', type: 'scale_1_5' }
         });
     }
 
