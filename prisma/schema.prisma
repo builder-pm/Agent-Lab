@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Scenario {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  steps     AgentStep[]
+  traces    TraceSnapshot[]
+  evaluations EvaluationResult[]
+
+  // Link to a Test Run (if part of a batch)
+  testRunId String?
+  testRun   TestRun? @relation(fields: [testRunId], references: [id])
+  
+  // Link to Test Case (for regression tracking)
+  testCaseId String?
+  testCase   TestCase? @relation(fields: [testCaseId], references: [id])
+}
+
+// ... (AgentStep, TraceSnapshot, etc. remain unchanged)
+
+model Dataset {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cases       TestCase[]
+  runs        TestRun[]
+}
+
+model TestCase {
+  id          String   @id @default(cuid())
+  datasetId   String
+  
+  // Input
+  prompt      String
+  
+  // Expected Behavior (for auto-eval)
+  expectedOutput String? // 'Golden Answer'
+  assertions     String? // JSON array of checks (e.g. "contains: 'error'")
+  
+  createdAt   DateTime @default(now())
+  
+  dataset     Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  scenarios   Scenario[]
+}
+
+model TestRun {
+  id          String   @id @default(cuid())
+  datasetId   String
+  status      String   // 'running', 'completed', 'failed'
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  
+  // Snapshot of the configuration used for this run
+  configSnapshot String? // JSON string
+  
+  scenarios   Scenario[]
+  
+  dataset     Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+model AgentStep {
+  id              String   @id @default(cuid())
+  scenarioId      String
+  
+  // Agent Metadata
+  agent           String   // 'planner', 'executor', etc.
+  stepLabel       String   // 'Reasoning', 'Tool: Search', etc.
+  stepType        String   // 'thought', 'action', 'output'
+  
+  // Content
+  content         String   // Main content
+  promptConsumed  String?  // The actual prompt sent to LLM
+  
+  // Metrics
+  inputTokens     Int      @default(0)
+  outputTokens    Int      @default(0)
+  totalTokens     Int      @default(0)
+  cost            Float    @default(0.0)
+  latencyMs       Int      @default(0)
+  
+  // Handovers
+  handoverFrom    String?
+  handoverReason  String?
+  
+  // Ordering
+  timestamp       BigInt   // Using BigInt for ms precision
+  
+  scenario        Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  evaluations     EvaluationResult[]
+}
+
+model TraceSnapshot {
+  id          String   @id @default(cuid())
+  scenarioId  String
+  label       String
+  createdAt   DateTime @default(now())
+  
+  // JSON blob for full restore
+  stateData   String   // Stores full serialized store state
+  
+  scenario    Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+}
+
+model EvaluationMetric {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., 'Faithfulness', 'Safety', 'Tool Precision'
+  description String?
+  type        String   // 'boolean', 'scale_1_5', 'float'
+  createdAt   DateTime @default(now())
+  
+  results     EvaluationResult[]
+}
+
+model EvaluationResult {
+  id          String   @id @default(cuid())
+  metricId    String
+  scenarioId  String?
+  stepId      String?
+  judgeId     String
+  
+  score       Float    // Normalized score
+  reasoning   String?  // Why this score was given
+  
+  createdAt   DateTime @default(now())
+
+  metric      EvaluationMetric @relation(fields: [metricId], references: [id])
+  scenario    Scenario?        @relation(fields: [scenarioId], references: [id])
+  step        AgentStep?       @relation(fields: [stepId], references: [id])
+  judge       Judge            @relation(fields: [judgeId], references: [id])
+}
+
+model Judge {
+  id          String   @id @default(cuid())
+  name        String   // e.g., 'gpt-4o', 'Human', 'RegexMatch'
+  type        String   // 'LLM', 'HUMAN', 'HEURISTIC'
+  config      String?  // JSON string for LLM params or regex patterns
+  
+  results     EvaluationResult[]
+}
