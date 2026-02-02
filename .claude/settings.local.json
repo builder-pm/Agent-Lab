@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(DATABASE_URL=\"file:./dev.db\" npx prisma db push:*)",
+      "Bash(curl:*)",
+      "Bash(npm run dev:*)",
+      "Bash(taskkill //F //PID 59708)",
+      "Bash(python3:*)",
+      "Bash(node:*)",
+      "Bash(tasklist:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(python:*)"
+    ]
+  }
+}

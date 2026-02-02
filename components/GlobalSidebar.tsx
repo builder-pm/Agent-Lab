@@ -5,9 +5,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Brain, Database, History, BarChart2, Settings, Home, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAgentStore } from '@/app/_store/useAgentStore';
 
 export function GlobalSidebar() {
     const pathname = usePathname();
+    const { toggleSettings } = useAgentStore();
 
     const navItems = [
         { href: '/', label: 'LAB', icon: <Brain size={20} />, tooltip: 'Execute AI agent pipelines' },
@@ -51,12 +53,28 @@ export function GlobalSidebar() {
             </nav>
 
             {/* Bottom Actions */}
-            <div className="mt-auto flex flex-col gap-4 px-2 w-full">
-                <button
-                    className="flex flex-col items-center justify-center p-2 rounded-lg text-zinc-600 hover:text-zinc-200 hover:bg-zinc-800 transition-all"
-                    title="Global settings"
+            <div className="mt-auto flex flex-col gap-4 px-2 w-full pb-2">
+                {/* Portfolio Link */}
+                <a
+                    href="https://www.namankansal.in"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center p-1 rounded-lg hover:bg-zinc-800 transition-all group"
+                    title="Visit Naman's Portfolio"
                 >
-                    <Settings size={20} />
+                    <div className="w-8 h-8 rounded-md overflow-hidden border border-zinc-800 group-hover:border-zinc-600 transition-colors">
+                        <img src="/naman-favicon.svg" alt="Naman" className="w-full h-full object-cover" />
+                    </div>
+                </a>
+
+                {/* Settings Toggle */}
+                <button
+                    onClick={toggleSettings}
+                    className="flex flex-col items-center justify-center p-2 rounded-lg text-zinc-500 hover:text-primary hover:bg-zinc-800 transition-all group"
+                    title="System preferences"
+                >
+                    <Settings size={20} className="group-hover:rotate-45 transition-transform duration-300" />
+                    <span className="text-[9px] font-bold font-space-mono mt-1 uppercase tracking-tighter">CONFIG</span>
                 </button>
             </div>
         </aside>

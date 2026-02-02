@@ -11,6 +11,7 @@ import { CommandCenter } from "./_components/CommandCenter";
 import { TimelineBar } from "./_components/TimelineBar";
 import { SessionDetailModal } from "./_components/SessionDetailModal";
 import { SettingsModal } from "./_components/SettingsModal";
+import { AuthButton } from "./_components/AuthButton";
 import { cn } from "@/lib/utils";
 
 export default function AgentLabPage() {
@@ -58,8 +59,8 @@ export default function AgentLabPage() {
             {/* Header */}
             <header className="h-14 border-b-4 border-border bg-card flex items-center px-4 justify-between z-30 relative shadow-sm shrink-0">
                 <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-foreground flex items-center justify-center text-background">
-                        <Brain size={18} />
+                    <div className="w-8 h-8 flex items-center justify-center">
+                        <img src="/logo.svg" alt="Agent Lab" className="w-6 h-6" />
                     </div>
                     <h1 className="font-bold text-lg font-space-grotesk tracking-tight flex items-baseline gap-2 text-primary">
                         AGENT LAB PRO
@@ -88,13 +89,9 @@ export default function AgentLabPage() {
                     >
                         <Terminal size={14} /> Telemetry
                     </button>
-                    <button
-                        onClick={toggleSettings}
-                        className="hover:text-primary transition-colors flex items-center gap-1"
-                        title="Configure execution mode, model selection, and system preferences"
-                    >
-                        <Settings size={14} /> System
-                    </button>
+                    <div className="pl-4 ml-6 border-l-2 border-border">
+                        <AuthButton />
+                    </div>
                 </nav>
             </header>
 
