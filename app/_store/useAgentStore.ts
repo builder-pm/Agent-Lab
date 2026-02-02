@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { supabaseClient } from '@/lib/supabase-client';
 
 // Available free models from OpenRouter
 export const AVAILABLE_MODELS = [
@@ -357,9 +358,17 @@ Match the tone to the question:
 
         try {
             const { selectedModel, executionMode, modelTiering, agentConfigs } = get();
+
+            // Get current session token for rate limiting
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (session?.access_token) {
+                headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+
             const response = await fetch('/api/chat', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 body: JSON.stringify({
                     messages: [{ role: 'user', content: prompt }],
                     agentConfigs: agentConfigs,
