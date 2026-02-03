@@ -12,10 +12,14 @@ import { TimelineBar } from "./_components/TimelineBar";
 import { SessionDetailModal } from "./_components/SessionDetailModal";
 import { SettingsModal } from "./_components/SettingsModal";
 import { AuthButton } from "./_components/AuthButton";
+import { LoginModal } from "./_components/LoginModal";
+import { CreditExhaustedModal } from "./_components/CreditExhaustedModal";
+import { useAuth } from "./_context/AuthContext";
 import { cn } from "@/lib/utils";
 
 export default function AgentLabPage() {
-    const { isConsoleOpen, toggleConsole, viewedSession, setViewedSession, toggleSettings, executionMode, modelTiering } = useAgentStore();
+    const { isConsoleOpen, toggleConsole, viewedSession, setViewedSession, toggleSettings, executionMode, modelTiering, rateLimitExceeded, clearRateLimitExceeded } = useAgentStore();
+    const { showLoginModal, setShowLoginModal, showCreditExhausted, setShowCreditExhausted, continueAsGuest, user } = useAuth();
     const [consoleWidth, setConsoleWidth] = React.useState(450);
     const [isResizing, setIsResizing] = React.useState(false);
     const [mounted, setMounted] = React.useState(false);
@@ -24,6 +28,14 @@ export default function AgentLabPage() {
     React.useEffect(() => {
         setMounted(true);
     }, []);
+
+    // Sync rate limit exceeded flag with credit exhausted modal for guests
+    React.useEffect(() => {
+        if (rateLimitExceeded && !user) {
+            setShowCreditExhausted(true);
+            clearRateLimitExceeded();
+        }
+    }, [rateLimitExceeded, user, setShowCreditExhausted, clearRateLimitExceeded]);
 
     const startResizing = React.useCallback((mouseDownEvent: React.MouseEvent) => {
         setIsResizing(true);
@@ -148,6 +160,23 @@ export default function AgentLabPage() {
 
             {/* Settings Modal */}
             <SettingsModal />
+
+            {/* Login Modal */}
+            <LoginModal
+                isOpen={showLoginModal}
+                onClose={() => setShowLoginModal(false)}
+                onGuestContinue={continueAsGuest}
+            />
+
+            {/* Credit Exhausted Modal */}
+            <CreditExhaustedModal
+                isOpen={showCreditExhausted}
+                onSignIn={() => {
+                    setShowCreditExhausted(false);
+                    setShowLoginModal(true);
+                }}
+                onClose={() => setShowCreditExhausted(false)}
+            />
         </div >
     );
 }

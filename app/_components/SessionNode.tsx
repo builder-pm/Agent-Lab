@@ -18,7 +18,11 @@ const AGENT_ICONS: Record<AgentType, React.ReactNode> = {
     researcher: <Database size={16} />,
     analyst: <FileText size={16} />,
     synthesizer: <Cpu size={16} />,
-    executor: <Shield size={16} />
+    executor: <Shield size={16} />,
+    'deep-planner': <Activity size={16} />, // Reuse Planner icon
+    'worker': <Database size={16} />, // Reuse Researcher icon
+    'aggregator': <Cpu size={16} />, // Reuse Synthesizer icon
+    'orchestrator': <Shield size={16} /> // Reuse Executor icon
 };
 
 export const SessionNode = ({ agent, steps, isActive, onClick, index }: SessionNodeProps) => {
@@ -51,9 +55,23 @@ export const SessionNode = ({ agent, steps, isActive, onClick, index }: SessionN
                     isActive ? "scale-105" : "hover:scale-105 opacity-80 hover:opacity-100"
                 )}
             >
+                {/* Stack Effect Layers */}
+                {steps.length > 1 && (
+                    <>
+                        <div className={cn(
+                            "absolute top-0 left-0 w-14 h-14 rounded-full border-2 border-zinc-800 bg-zinc-900 transition-all duration-300",
+                            isActive ? "translate-x-1 -translate-y-1 opacity-100" : "translate-x-0.5 -translate-y-0.5 opacity-0 group-hover:opacity-100"
+                        )} />
+                        <div className={cn(
+                            "absolute top-0 left-0 w-14 h-14 rounded-full border-2 border-zinc-800 bg-zinc-900 transition-all duration-300",
+                            isActive ? "translate-x-2 -translate-y-2 opacity-100" : "translate-x-1 -translate-y-1 opacity-0 group-hover:opacity-100"
+                        )} />
+                    </>
+                )}
+
                 {/* Node Circle */}
                 <div className={cn(
-                    "w-14 h-14 rounded-full flex items-center justify-center border-2 shadow-lg z-10 bg-zinc-950 transition-all duration-300",
+                    "w-14 h-14 rounded-full flex items-center justify-center border-2 shadow-lg z-10 bg-zinc-950 transition-all duration-300 relative",
                     isActive
                         ? `border-${config.color.split('-')[1]}-400 shadow-[0_0_20px_rgba(255,255,255,0.1)]`
                         : "border-zinc-700 group-hover:border-zinc-500"

@@ -9,6 +9,13 @@ import { PrismHUD } from "./PrismHUD";
 import { cn } from "@/lib/utils";
 
 const AGENTS: AgentType[] = ["planner", "executor", "researcher", "analyst", "synthesizer"];
+const VISUAL_MAPPING: Record<string, AgentType> = {
+    'deep-planner': 'planner',
+    'worker': 'researcher',
+    'aggregator': 'synthesizer',
+    'orchestrator': 'executor'
+};
+const getVisualAgent = (agent: AgentType): AgentType => (VISUAL_MAPPING[agent] as AgentType) || agent;
 
 const ROW_HEIGHT = 100;
 const COL_WIDTH = 120;
@@ -116,7 +123,7 @@ export const AgentGraphCanvas = () => {
                             >
                                 <AgentPillar
                                     agentId={agent}
-                                    isActive={activeAgent === agent}
+                                    isActive={getVisualAgent(activeAgent || 'executor') === agent}
                                     onClickConfig={() => setConfigAgent(agent)}
                                     compact
                                 />
@@ -153,8 +160,8 @@ export const AgentGraphCanvas = () => {
                                 const parentSessions = sessions.filter(s => s.columnIndex === session.columnIndex - 1);
 
                                 return parentSessions.map((parent, pIdx) => {
-                                    const prevAgentIdx = AGENTS.indexOf(parent.agent);
-                                    const currAgentIdx = AGENTS.indexOf(session.agent);
+                                    const prevAgentIdx = AGENTS.indexOf(getVisualAgent(parent.agent));
+                                    const currAgentIdx = AGENTS.indexOf(getVisualAgent(session.agent));
 
                                     const x1 = START_OFFSET_X + (parent.columnIndex * COL_WIDTH) + 20;
                                     const y1 = (prevAgentIdx * ROW_HEIGHT) + START_OFFSET_Y;
@@ -194,7 +201,7 @@ export const AgentGraphCanvas = () => {
 
                         {/* Nodes */}
                         {sessions.map((session, idx) => {
-                            const agentIdx = AGENTS.indexOf(session.agent);
+                            const agentIdx = AGENTS.indexOf(getVisualAgent(session.agent));
                             const top = (agentIdx * ROW_HEIGHT) + START_OFFSET_Y - 28;
                             const left = START_OFFSET_X + (session.columnIndex * COL_WIDTH) - 28;
 

@@ -2,16 +2,37 @@ import { supabase } from './supabase';
 
 const GUEST_LIMIT = 3;
 const PRO_LIMIT = 15;
+const MASTER_LIMIT = 1000;
 
-export async function checkRateLimit(userId: string | null, ipAddress: string) {
+// Demo account email (stored in env for security)
+const DEMO_EMAIL = process.env.DEMO_EMAIL || 'demo@agentlab.pro';
+
+export async function checkRateLimit(userId: string | null, ipAddress: string, userEmail?: string | null) {
     if (!supabase) return { allowed: true, remaining: 999, limit: 999 };
 
     const today = new Date().toISOString().split('T')[0];
-    const limit = userId ? PRO_LIMIT : GUEST_LIMIT;
+
+    // Determine limit based on user type
+    let limit = GUEST_LIMIT;
+    if (userId) {
+        // Check if this is the master demo account
+        const isMaster = userEmail && userEmail.toLowerCase() === DEMO_EMAIL.toLowerCase();
+
+        // Debugging logs to help identify why demo account might fail
+        if (userEmail) {
+            console.log(`[Rate Limit] User ID: ${userId}, Email: ${userEmail}, Demo Email: ${DEMO_EMAIL}, Match: ${isMaster}`);
+        }
+
+        if (isMaster) {
+            limit = MASTER_LIMIT;
+        } else {
+            limit = PRO_LIMIT;
+        }
+    }
 
     // Try to find existing usage record for today
     let query = supabase
-        .from('user_usage')
+        .from('agentlab.user_usage')
         .select('query_count')
         .eq('reset_date', today);
 
@@ -49,7 +70,7 @@ export async function incrementUsage(userId: string | null, ipAddress: string) {
     // So we'll use a simple approach for now, assuming low concurrency
 
     let query = supabase
-        .from('user_usage')
+        .from('agentlab.user_usage')
         .select('id, query_count')
         .eq('reset_date', today);
 
@@ -63,7 +84,7 @@ export async function incrementUsage(userId: string | null, ipAddress: string) {
 
     if (data) {
         await supabase
-            .from('user_usage')
+            .from('agentlab.user_usage')
             .update({
                 query_count: data.query_count + 1,
                 last_query_at: new Date().toISOString()
@@ -71,7 +92,7 @@ export async function incrementUsage(userId: string | null, ipAddress: string) {
             .eq('id', data.id);
     } else {
         await supabase
-            .from('user_usage')
+            .from('agentlab.user_usage')
             .insert({
                 user_id: userId,
                 ip_address: ipAddress,

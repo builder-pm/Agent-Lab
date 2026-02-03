@@ -4,9 +4,10 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../_context/AuthContext';
 import { supabaseClient } from '@/lib/supabase-client';
 import { LogIn, LogOut, User as UserIcon, Shield } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function AuthButton() {
-    const { user, signInWithGoogle, signOut, isLoading } = useAuth();
+    const { user, signOut, isLoading, setShowLoginModal } = useAuth();
     const [usage, setUsage] = useState<{ remaining: number; limit: number } | null>(null);
 
     // Fetch usage info (we'll implement an endpoint for this)
@@ -55,7 +56,7 @@ export function AuthButton() {
                     </div>
                 )}
                 <button
-                    onClick={signInWithGoogle}
+                    onClick={() => setShowLoginModal(true)}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white text-black font-bold text-xs border-2 border-black hover:bg-zinc-200 transition-colors shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-[1px] active:translate-y-[1px]"
                 >
                     <LogIn size={14} /> SIGN IN
@@ -67,10 +68,13 @@ export function AuthButton() {
     return (
         <div className="flex items-center gap-4">
             {usage && (
-                <div className="flex items-center gap-1.5 px-2 py-1 bg-primary/10 border border-primary/20 rounded text-[10px] font-mono">
-                    <Shield size={10} className="text-primary" />
-                    <span className="text-zinc-400">PRO:</span>
-                    <span className={usage.remaining === 0 ? 'text-red-400' : 'text-primary'}>
+                <div className={cn(
+                    "flex items-center gap-1.5 px-2 py-1 border rounded text-[10px] font-mono",
+                    usage.limit >= 100 ? "bg-amber-500/10 border-amber-500/20" : "bg-primary/10 border-primary/20"
+                )}>
+                    <Shield size={10} className={usage.limit >= 100 ? "text-amber-400" : "text-primary"} />
+                    <span className="text-zinc-400">{usage.limit >= 100 ? 'MASTER:' : 'PRO:'}</span>
+                    <span className={usage.remaining === 0 ? 'text-red-400' : (usage.limit >= 100 ? 'text-amber-400' : 'text-primary')}>
                         {usage.remaining}/{usage.limit}
                     </span>
                 </div>

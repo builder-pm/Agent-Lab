@@ -11,15 +11,17 @@ export async function GET(request: NextRequest) {
         // Get user from auth header
         const authHeader = request.headers.get('Authorization');
         let userId: string | null = null;
+        let userEmail: string | null = null;
 
         if (authHeader) {
             const token = authHeader.replace('Bearer ', '');
             const { data: { user } } = await supabase.auth.getUser(token);
             userId = user?.id || null;
+            userEmail = user?.email || null;
         }
 
         const ip = request.headers.get('x-forwarded-for') || '127.0.0.1';
-        const { remaining, limit } = await checkRateLimit(userId, ip);
+        const { remaining, limit } = await checkRateLimit(userId, ip, userEmail);
 
         return Response.json({ remaining, limit });
     } catch (error) {

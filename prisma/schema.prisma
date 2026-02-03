@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -94,6 +94,11 @@ model AgentStep {
   // Handovers
   handoverFrom    String?
   handoverReason  String?
+
+  // Parallel Execution Support
+  isParallel      Boolean  @default(false)
+  parallelGroup   String?  // UUID or label grouping parallel steps
+  parallelLabel   String?  // e.g., "Market Trends" or "Query 1"
   
   // Ordering
   timestamp       BigInt   // Using BigInt for ms precision

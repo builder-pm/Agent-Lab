@@ -13,39 +13,12 @@ async function createTable() {
 
     // Try inserting a test record to check if table exists
     const { error: testError } = await supabase
-        .from('agent_queries')
+        .from('agentlab.agent_queries')
         .select('id')
         .limit(1);
 
     if (testError && testError.message.includes('does not exist')) {
-        console.log('Table does not exist. Please run the following SQL in Supabase SQL Editor:');
-        console.log(`
-CREATE TABLE IF NOT EXISTS agent_queries (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    scenario_id TEXT NOT NULL,
-    user_prompt TEXT NOT NULL,
-    step_id TEXT NOT NULL,
-    agent TEXT NOT NULL,
-    step_type TEXT NOT NULL,
-    step_label TEXT,
-    input_content TEXT,
-    output_content TEXT,
-    prompt_consumed TEXT,
-    input_tokens INTEGER DEFAULT 0,
-    output_tokens INTEGER DEFAULT 0,
-    total_tokens INTEGER DEFAULT 0,
-    latency_ms INTEGER DEFAULT 0,
-    cost DECIMAL(10, 6) DEFAULT 0,
-    model_name TEXT,
-    execution_mode TEXT,
-    handover_from TEXT,
-    handover_reason TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_agent_queries_scenario ON agent_queries(scenario_id);
-CREATE INDEX IF NOT EXISTS idx_agent_queries_created ON agent_queries(created_at DESC);
-        `);
+        console.log('Schema or table does not exist. Please run the consolidation SQL script in scripts/create_supabase_table.sql');
         return;
     }
 
@@ -54,11 +27,11 @@ CREATE INDEX IF NOT EXISTS idx_agent_queries_created ON agent_queries(created_at
         return;
     }
 
-    console.log('✅ agent_queries table already exists!');
+    console.log('✅ agentlab.agent_queries table exists!');
 
     // Insert a test record
     const { error: insertError } = await supabase
-        .from('agent_queries')
+        .from('agentlab.agent_queries')
         .insert({
             scenario_id: 'test-setup',
             user_prompt: 'Setup test',

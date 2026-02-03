@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
         // Get user from auth header if present
         const authHeader = request.headers.get('Authorization');
         let userId: string | null = null;
+        let userEmail: string | null = null;
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const token = authHeader.replace('Bearer ', '');
             // We need a server-side supabase client here to verify the token
@@ -27,11 +28,12 @@ export async function POST(request: NextRequest) {
             );
             const { data: { user } } = await supabase.auth.getUser(token);
             userId = user?.id || null;
+            userEmail = user?.email || null;
         }
 
         const { checkRateLimit, incrementUsage } = await import('@/lib/rate-limit');
         const { logActivity } = await import('@/lib/activity');
-        const { allowed, remaining, limit } = await checkRateLimit(userId, ip);
+        const { allowed, remaining, limit } = await checkRateLimit(userId, ip, userEmail);
 
         if (!allowed) {
             await logActivity({
@@ -74,16 +76,21 @@ export async function POST(request: NextRequest) {
         }
 
         const agentConfigs = body.agentConfigs || {};
-        const executionMode = body.executionMode || 'linear';
+        const executionMode = body.executionMode || 'linear'; // 'turbo', 'linear', 'deep'
         const modelTiering = body.modelTiering || false;
+        const isLabsEnabled = body.isLabsEnabled || false;
+
+        // Map frontend executionMode to backend agentMode
+        const agentMode = executionMode === 'deep' ? 'deep' : 'linear';
 
         // Create the agent with the selected model
         const agent = createAgent({
-            name: 'AgentLab Demo',
-            description: 'An educational AI agent for demonstrating agentic workflows.',
+            agentMode: agentMode,
+            executionMode: executionMode, // Pass through for LinearAgent to distinguish turbo/linear
             agentConfigs: agentConfigs,
-            executionMode: executionMode,
             modelTiering: modelTiering,
+            isLabsEnabled: isLabsEnabled,
+            scenarioId: body.scenarioId || `sc_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         });
 
         // Create a readable stream for the response

@@ -5,7 +5,7 @@ import { Settings, Cpu, Search, Activity, LayoutTemplate, Play } from "lucide-re
 import { AgentType } from "../_store/useAgentStore";
 import { cn } from "@/lib/utils";
 
-const AGENT_ICONS = {
+const AGENT_ICONS: any = {
     planner: LayoutTemplate,
     researcher: Search,
     analyst: Activity,
@@ -13,7 +13,7 @@ const AGENT_ICONS = {
     executor: Play,
 };
 
-const AGENT_COLORS = {
+const AGENT_COLORS: any = {
     planner: "text-blue-400",
     researcher: "text-amber-400",
     analyst: "text-purple-400",
@@ -29,8 +29,8 @@ interface AgentPillarProps {
 }
 
 export const AgentPillar = ({ agentId, isActive, onClickConfig, compact }: AgentPillarProps) => {
-    const Icon = AGENT_ICONS[agentId] || Play;
-    const colorClass = AGENT_COLORS[agentId] || "text-zinc-400";
+    const Icon = AGENT_ICONS[agentId.replace('deep-', '').replace('worker', 'researcher').replace('aggregator', 'synthesizer').replace('orchestrator', 'executor')] || Play;
+    const colorClass = AGENT_COLORS[agentId.replace('deep-', '').replace('worker', 'researcher').replace('aggregator', 'synthesizer').replace('orchestrator', 'executor')] || "text-zinc-400";
 
     return (
         <div
@@ -47,12 +47,13 @@ export const AgentPillar = ({ agentId, isActive, onClickConfig, compact }: Agent
             )}>
                 <Icon size={compact ? 16 : 24} className={cn(colorClass, isActive && "animate-pulse drop-shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]")} />
             </div>
-            
-            {!compact && (
-                <span className="text-[8px] font-bold uppercase mt-1 text-muted-foreground select-none tracking-widest">
-                    {agentId}
-                </span>
-            )}
+
+            <span className={cn(
+                "font-bold uppercase mt-1 text-muted-foreground select-none tracking-widest text-center leading-none",
+                compact ? "text-[6px]" : "text-[8px]"
+            )}>
+                {agentId.replace('deep-', '').replace('worker', 'researcher')}
+            </span>
 
             {/* Hover Config Button - Subtle */}
             <button

@@ -11,7 +11,7 @@ export const AVAILABLE_MODELS = [
 ] as const;
 
 // Mock types for now, will replace with @evilmartians/agent-prism-types later
-export type AgentType = 'planner' | 'researcher' | 'analyst' | 'synthesizer' | 'executor';
+export type AgentType = 'planner' | 'researcher' | 'analyst' | 'synthesizer' | 'executor' | 'deep-planner' | 'worker' | 'aggregator' | 'orchestrator';
 
 // Agent configuration for each agent type
 export interface AgentConfig {
@@ -48,26 +48,31 @@ export interface HandoverEvent {
 export interface AgentStep {
     id: string;
     parentIds?: string[]; // Support for multiple parents (DAG structure)
-    type: 'input' | 'thought' | 'action' | 'output' | 'approval_requested';
+    type: 'input' | 'thought' | 'action' | 'output' | 'approval_requested' | 'process';
     label: string;
     content: string; // JSON or text
     timestamp: number;
     usage?: {
-        inputTokens: number;
-        outputTokens: number;
+        inputTokens?: number;
+        outputTokens?: number;
+        promptTokens?: number;
+        completionTokens?: number;
         totalTokens: number;
         cost: number;
+        reasoningTokens?: number;
     };
     metadata?: Record<string, any>;
     // Multi-agent support
     agent?: AgentType;
     // Handover tracking
     handoverFrom?: AgentType;
+    handoverTo?: AgentType;
     handoverReason?: string;
     promptConsumed?: string;
     // Parallel/DAG support
     isParallel?: boolean;
     parallelGroup?: string;
+    parallelLabel?: string;
     isFastRoute?: boolean;
     // Evaluation support
     evaluationResults?: Array<{
@@ -75,6 +80,16 @@ export interface AgentStep {
         score: number;
         reasoning: string;
     }>;
+    // Enriched Telemetry for Protocol View
+    input?: string;
+    inputFrom?: string;
+    systemPrompt?: string;
+    modelInfo?: {
+        name: string;
+        contextLimit?: string;
+        outputLimit?: string;
+    };
+    reasoning?: string;
 }
 
 export interface AgentScenario {
@@ -97,8 +112,10 @@ interface AgentLabState {
     isLoading: boolean;
     isStreaming: boolean;
     error: string | null;
+    rateLimitExceeded: boolean;
     showAnalytics: boolean;
     isConsoleOpen: boolean;
+    isLabsEnabled: boolean;
 
     // Session History
     savedSessions: SavedSession[];
@@ -149,16 +166,18 @@ interface AgentLabState {
     setViewedSession: (session: { agent: AgentType, steps: AgentStep[] } | null) => void;
 
     // Settings
-    executionMode: 'linear' | 'turbo';
+    executionMode: 'linear' | 'turbo' | 'deep';
     modelTiering: boolean;
     autoSave: boolean;
     isSettingsOpen: boolean;
 
     // Settings Actions
     toggleSettings: () => void;
-    setExecutionMode: (mode: 'linear' | 'turbo') => void;
+    setExecutionMode: (mode: 'linear' | 'turbo' | 'deep') => void;
     setModelTiering: (enabled: boolean) => void;
     setAutoSave: (enabled: boolean) => void;
+    toggleLabs: () => void;
+    clearRateLimitExceeded: () => void;
 }
 
 
@@ -168,6 +187,7 @@ export const useAgentStore = create<AgentLabState>((set, get) => ({
     isLoading: false,
     isStreaming: false,
     error: null,
+    rateLimitExceeded: false,
     savedSessions: loadSessionsFromStorage(),
     isPlaying: false,
     currentStepIndex: -1,
@@ -319,6 +339,62 @@ Match the tone to the question:
             bgColor: 'bg-zinc-800/50',
             tools: ['task_router']
         },
+        'deep-planner': {
+            id: 'deep-planner',
+            name: 'Deep Planner',
+            description: 'Deconstructs complex queries into multiple parallel sub-tasks.',
+            role: 'Map Phase',
+            systemPrompt: 'Break down the user query into independent research directions.',
+            guardrails: [],
+            maxInputTokens: 128000,
+            maxOutputTokens: 2048,
+            selectedModel: 'nvidia/nemotron-nano-9b-v2:free',
+            color: 'text-violet-400',
+            bgColor: 'bg-violet-500/20',
+            tools: []
+        },
+        'worker': {
+            id: 'worker',
+            name: 'Field Researcher',
+            description: 'Executes specific sub-queries in parallel.',
+            role: 'Worker Phase',
+            systemPrompt: 'Search and summarize findings for a specific topic.',
+            guardrails: [],
+            maxInputTokens: 32000,
+            maxOutputTokens: 2048,
+            selectedModel: 'nvidia/nemotron-nano-9b-v2:free',
+            color: 'text-cyan-400',
+            bgColor: 'bg-cyan-500/20',
+            tools: ['jina_search', 'jina_scraper']
+        },
+        'aggregator': {
+            id: 'aggregator',
+            name: 'Synthesizer',
+            description: 'Combines multiple research threads into a cohesive report.',
+            role: 'Reduce Phase',
+            systemPrompt: 'Synthesize the provided summaries into a final answer.',
+            guardrails: [],
+            maxInputTokens: 128000,
+            maxOutputTokens: 4096,
+            selectedModel: 'nvidia/nemotron-nano-9b-v2:free',
+            color: 'text-emerald-400',
+            bgColor: 'bg-emerald-500/20',
+            tools: []
+        },
+        'orchestrator': {
+            id: 'orchestrator',
+            name: 'Orchestrator',
+            description: 'Manages the deep research workflow.',
+            role: 'System',
+            systemPrompt: 'System Controller',
+            guardrails: [],
+            maxInputTokens: 0,
+            maxOutputTokens: 0,
+            selectedModel: 'nvidia/nemotron-nano-9b-v2:free',
+            color: 'text-zinc-400',
+            bgColor: 'bg-zinc-800/50',
+            tools: []
+        }
     },
     selectedAgent: null,
     selectedStepId: null,
@@ -374,8 +450,21 @@ Match the tone to the question:
                     agentConfigs: agentConfigs,
                     executionMode: executionMode,
                     modelTiering: modelTiering,
+                    isLabsEnabled: get().isLabsEnabled,
                 }),
             });
+
+            // Handle rate limit exceeded (429)
+            if (response.status === 429) {
+                const errorData = await response.json();
+                set({
+                    error: errorData.message || 'Rate limit exceeded',
+                    isLoading: false,
+                    isStreaming: false,
+                    rateLimitExceeded: true  // Flag for UI to show credit exhausted modal
+                });
+                return;
+            }
 
             if (!response.body) throw new Error('No response body');
 
@@ -422,6 +511,13 @@ Match the tone to the question:
                                     content: newStep.content || existingStep.content,
                                     label: newStep.label || existingStep.label,
                                     usage: newStep.usage || existingStep.usage,
+                                    // Preserve enriched telemetry if not provided in newStep
+                                    input: newStep.input || existingStep.input,
+                                    inputFrom: newStep.inputFrom || existingStep.inputFrom,
+                                    systemPrompt: newStep.systemPrompt || existingStep.systemPrompt,
+                                    modelInfo: newStep.modelInfo || existingStep.modelInfo,
+                                    reasoning: newStep.reasoning || existingStep.reasoning,
+                                    handoverTo: newStep.handoverTo || existingStep.handoverTo,
                                     // Ensure type transition (e.g., thought -> output)
                                     type: newStep.type !== 'thought' ? newStep.type : existingStep.type
                                 };
@@ -638,6 +734,7 @@ Match the tone to the question:
     executionMode: loadSettingsFromStorage().executionMode || 'linear',
     modelTiering: loadSettingsFromStorage().modelTiering || false,
     autoSave: loadSettingsFromStorage().autoSave || true,
+    isLabsEnabled: loadSettingsFromStorage().isLabsEnabled || false,
     isSettingsOpen: false,
 
     // Settings Actions
@@ -645,6 +742,11 @@ Match the tone to the question:
     setExecutionMode: (mode) => {
         set({ executionMode: mode });
         saveSettingsToStorage({ ...get(), executionMode: mode });
+    },
+    toggleLabs: () => {
+        const newState = !get().isLabsEnabled;
+        set({ isLabsEnabled: newState });
+        saveSettingsToStorage({ ...get(), isLabsEnabled: newState });
     },
     setModelTiering: (enabled) => {
         set({ modelTiering: enabled });
@@ -654,6 +756,7 @@ Match the tone to the question:
         set({ autoSave: enabled });
         saveSettingsToStorage({ ...get(), autoSave: enabled });
     },
+    clearRateLimitExceeded: () => set({ rateLimitExceeded: false }),
 }));
 
 // LocalStorage helpers
@@ -677,13 +780,13 @@ function saveSessionsToStorage(sessions: SavedSession[]): void {
 }
 
 // Settings helpers
-function loadSettingsFromStorage(): { executionMode: 'linear' | 'turbo'; modelTiering: boolean; autoSave: boolean } {
-    if (typeof window === 'undefined') return { executionMode: 'linear', modelTiering: false, autoSave: true };
+function loadSettingsFromStorage(): { executionMode: 'linear' | 'turbo' | 'deep'; modelTiering: boolean; autoSave: boolean; isLabsEnabled: boolean } {
+    if (typeof window === 'undefined') return { executionMode: 'linear', modelTiering: false, autoSave: true, isLabsEnabled: false };
     try {
         const stored = localStorage.getItem('agent-lab-settings');
-        return stored ? JSON.parse(stored) : { executionMode: 'linear', modelTiering: false, autoSave: true };
+        return stored ? JSON.parse(stored) : { executionMode: 'linear', modelTiering: false, autoSave: true, isLabsEnabled: false };
     } catch {
-        return { executionMode: 'linear', modelTiering: false, autoSave: true };
+        return { executionMode: 'linear', modelTiering: false, autoSave: true, isLabsEnabled: false };
     }
 }
 
@@ -693,7 +796,8 @@ function saveSettingsToStorage(state: any): void {
         const settings = {
             executionMode: state.executionMode,
             modelTiering: state.modelTiering,
-            autoSave: state.autoSave
+            autoSave: state.autoSave,
+            isLabsEnabled: state.isLabsEnabled
         };
         localStorage.setItem('agent-lab-settings', JSON.stringify(settings));
     } catch (e) {
@@ -716,9 +820,15 @@ function mapEventToStep(event: any): AgentStep {
             inputTokens: estimatedInputTokens,
             outputTokens: estimatedOutputTokens,
             totalTokens: totalTokens,
-            cost: (totalTokens / 1000) * 0.01 // Default heuristic
+            cost: (totalTokens / 1000) * 0.01, // Default heuristic
+            reasoningTokens: event.meta?.reasoningTokens || 0
         };
     })();
+
+    // Ensure usage has reasoningTokens if passed in meta
+    if (usage && event.meta?.reasoningTokens) {
+        usage.reasoningTokens = event.meta.reasoningTokens;
+    }
 
     const base: AgentStep = {
         id: event.stepId || `evt-${Date.now()}-${stepCounter}-${Math.random().toString(36).slice(2, 9)}`,
@@ -733,6 +843,14 @@ function mapEventToStep(event: any): AgentStep {
         isParallel: event.isParallel,
         parallelGroup: event.parallelGroup,
         isFastRoute: event.isFastRoute,
+        // Enriched Telemetry from meta
+        input: event.meta?.input,
+        inputFrom: event.meta?.inputFrom,
+        systemPrompt: event.meta?.systemPrompt,
+        modelInfo: event.meta?.modelInfo,
+        reasoning: event.meta?.reasoning,
+        handoverTo: event.meta?.handoverTo,
+        parallelLabel: event.parallelLabel
     };
 
     // determine latency
@@ -743,7 +861,7 @@ function mapEventToStep(event: any): AgentStep {
             return {
                 ...base,
                 type: 'thought',
-                label: 'Reasoning',
+                label: event.label || event.parallelLabel || 'Reasoning',
                 content: event.input || 'Initializing phase...',
             };
         case 'approval_requested':
@@ -773,7 +891,7 @@ function mapEventToStep(event: any): AgentStep {
             return {
                 ...base,
                 type: 'output',
-                label: 'Final Answer',
+                label: event.label || 'Final Answer',
                 content: event.output || event.content || '',
             };
         default:

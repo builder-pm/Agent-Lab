@@ -43,3 +43,4 @@ prisma/dev.db-journal
 
 # problematic files
 nul
+.planning/
