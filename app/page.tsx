@@ -99,7 +99,10 @@ export default function AgentLabPage() {
                         className={`hover:text-primary transition-colors flex items-center gap-1 ${isConsoleOpen ? 'text-primary' : ''}`}
                         title="Toggle the command center panel with chat, execution steps, and performance metrics"
                     >
-                        <Terminal size={14} /> Telemetry
+                        <span suppressHydrationWarning className="flex items-center">
+                            <Terminal size={14} />
+                        </span>
+                        Telemetry
                     </button>
                     <div className="pl-4 ml-6 border-l-2 border-border">
                         <AuthButton />

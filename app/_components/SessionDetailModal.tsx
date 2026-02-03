@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { AgentStep, AgentType, useAgentStore } from "../_store/useAgentStore";
-import { X, Layers, Clock, Zap, Coins, ChevronRight, Binary, Fingerprint, Terminal, Brain, ArrowRight } from "lucide-react";
+import { X, Layers, Clock, Zap, Coins, ChevronRight, Binary, Fingerprint, Terminal, Brain, ArrowRight, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,6 +19,14 @@ export const SessionDetailModal = ({ agent, steps, onClose }: SessionDetailModal
     const config = agentConfigs[agent];
     const [selectedStepIdx, setSelectedStepIdx] = useState(0);
     const selectedStep = steps[selectedStepIdx];
+    const [isCopied, setIsCopied] = useState(false);
+
+    const handleCopyLogs = () => {
+        const logs = JSON.stringify(steps, null, 2);
+        navigator.clipboard.writeText(logs);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+    };
 
     // Aggregate Metrics for header
     const firstStep = steps[0];
@@ -120,9 +128,18 @@ export const SessionDetailModal = ({ agent, steps, onClose }: SessionDetailModal
                                     {(selectedStep.usage?.totalTokens || 0).toLocaleString()}
                                 </div>
                             </div>
-                            <button onClick={onClose} className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full transition-all ml-4">
-                                <X size={20} className="text-zinc-400" />
-                            </button>
+                            <div className="flex items-center gap-2 ml-4">
+                                <button
+                                    onClick={handleCopyLogs}
+                                    className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full transition-all text-zinc-400 hover:text-white"
+                                    title="Copy All Logs"
+                                >
+                                    {isCopied ? <Check size={20} className="text-green-500" /> : <Copy size={20} />}
+                                </button>
+                                <button onClick={onClose} className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-full transition-all">
+                                    <X size={20} className="text-zinc-400" />
+                                </button>
+                            </div>
                         </div>
                     </div>
 

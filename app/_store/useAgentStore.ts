@@ -11,7 +11,7 @@ export const AVAILABLE_MODELS = [
 ] as const;
 
 // Mock types for now, will replace with @evilmartians/agent-prism-types later
-export type AgentType = 'planner' | 'researcher' | 'analyst' | 'synthesizer' | 'executor' | 'deep-planner' | 'worker' | 'aggregator' | 'orchestrator';
+export type AgentType = 'router' | 'planner' | 'researcher' | 'analyst' | 'synthesizer' | 'executor' | 'deep-planner' | 'worker' | 'aggregator' | 'orchestrator';
 
 // Agent configuration for each agent type
 export interface AgentConfig {
@@ -390,6 +390,20 @@ Match the tone to the question:
             guardrails: [],
             maxInputTokens: 0,
             maxOutputTokens: 0,
+            selectedModel: 'nvidia/nemotron-nano-9b-v2:free',
+            color: 'text-zinc-400',
+            bgColor: 'bg-zinc-800/50',
+            tools: []
+        },
+        router: {
+            id: 'router',
+            name: 'Router',
+            description: 'Intelligently classifies user intent to optimize the execution flow.',
+            role: 'Intent Classification',
+            systemPrompt: 'Classify user intent as simple or research.',
+            guardrails: [],
+            maxInputTokens: 128000,
+            maxOutputTokens: 256,
             selectedModel: 'nvidia/nemotron-nano-9b-v2:free',
             color: 'text-zinc-400',
             bgColor: 'bg-zinc-800/50',

@@ -8,7 +8,7 @@ import { SessionDetailModal } from "./SessionDetailModal";
 import { PrismHUD } from "./PrismHUD";
 import { cn } from "@/lib/utils";
 
-const AGENTS: AgentType[] = ["planner", "executor", "researcher", "analyst", "synthesizer"];
+const AGENTS: AgentType[] = ["router", "planner", "executor", "researcher", "analyst", "synthesizer"];
 const VISUAL_MAPPING: Record<string, AgentType> = {
     'deep-planner': 'planner',
     'worker': 'researcher',
@@ -98,6 +98,7 @@ export const AgentGraphCanvas = () => {
         <div className="flex-1 relative overflow-hidden flex flex-col bg-[#0c0c0e]">
             {/* Background Grid */}
             <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
+                suppressHydrationWarning
                 style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
 
             {/* Canvas Header/Status */}

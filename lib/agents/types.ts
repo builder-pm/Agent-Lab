@@ -8,7 +8,7 @@ export interface AgentConfig {
     scenarioId?: string;
 }
 
-export type AgentType = 'planner' | 'executor' | 'researcher' | 'analyst' | 'synthesizer' | 'user';
+export type AgentType = 'router' | 'planner' | 'executor' | 'researcher' | 'analyst' | 'synthesizer' | 'user';
 
 export type AgentEvent =
     | { type: 'step_start'; stepId: string; input: string; agent?: string; consumedPrompt?: string; isParallel?: boolean; parallelGroup?: string; parallelLabel?: string; isFastRoute?: boolean; label?: string; meta?: any }

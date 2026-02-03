@@ -14,15 +14,16 @@ interface SessionNodeProps {
 }
 
 const AGENT_ICONS: Record<AgentType, React.ReactNode> = {
-    planner: <Activity size={16} />,
-    researcher: <Database size={16} />,
-    analyst: <FileText size={16} />,
-    synthesizer: <Cpu size={16} />,
-    executor: <Shield size={16} />,
-    'deep-planner': <Activity size={16} />, // Reuse Planner icon
-    'worker': <Database size={16} />, // Reuse Researcher icon
-    'aggregator': <Cpu size={16} />, // Reuse Synthesizer icon
-    'orchestrator': <Shield size={16} /> // Reuse Executor icon
+    planner: <Activity suppressHydrationWarning size={16} />,
+    researcher: <Database suppressHydrationWarning size={16} />,
+    analyst: <FileText suppressHydrationWarning size={16} />,
+    synthesizer: <Cpu suppressHydrationWarning size={16} />,
+    executor: <Shield suppressHydrationWarning size={16} />,
+    'deep-planner': <Activity suppressHydrationWarning size={16} />, // Reuse Planner icon
+    'worker': <Database suppressHydrationWarning size={16} />, // Reuse Researcher icon
+    'aggregator': <Cpu suppressHydrationWarning size={16} />, // Reuse Synthesizer icon
+    'orchestrator': <Shield suppressHydrationWarning size={16} />, // Reuse Executor icon
+    router: <Zap suppressHydrationWarning size={16} />
 };
 
 export const SessionNode = ({ agent, steps, isActive, onClick, index }: SessionNodeProps) => {
@@ -76,7 +77,7 @@ export const SessionNode = ({ agent, steps, isActive, onClick, index }: SessionN
                         ? `border-${config.color.split('-')[1]}-400 shadow-[0_0_20px_rgba(255,255,255,0.1)]`
                         : "border-zinc-700 group-hover:border-zinc-500"
                 )}>
-                    <div className={cn(
+                    <div suppressHydrationWarning className={cn(
                         "text-zinc-400 group-hover:text-white transition-colors",
                         config.color
                     )}>

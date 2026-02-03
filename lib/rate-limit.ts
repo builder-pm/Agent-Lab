@@ -32,7 +32,7 @@ export async function checkRateLimit(userId: string | null, ipAddress: string, u
 
     // Try to find existing usage record for today
     let query = supabase
-        .from('agentlab.user_usage')
+        .from('user_usage')
         .select('query_count')
         .eq('reset_date', today);
 
@@ -70,7 +70,7 @@ export async function incrementUsage(userId: string | null, ipAddress: string) {
     // So we'll use a simple approach for now, assuming low concurrency
 
     let query = supabase
-        .from('agentlab.user_usage')
+        .from('user_usage')
         .select('id, query_count')
         .eq('reset_date', today);
 
@@ -83,21 +83,23 @@ export async function incrementUsage(userId: string | null, ipAddress: string) {
     const { data } = await query.single();
 
     if (data) {
-        await supabase
-            .from('agentlab.user_usage')
+        const { error } = await supabase
+            .from('user_usage')
             .update({
                 query_count: data.query_count + 1,
                 last_query_at: new Date().toISOString()
             })
             .eq('id', data.id);
+        if (error) console.error("RateLimit Update Error:", error);
     } else {
-        await supabase
-            .from('agentlab.user_usage')
+        const { error } = await supabase
+            .from('user_usage')
             .insert({
                 user_id: userId,
                 ip_address: ipAddress,
                 query_count: 1,
                 reset_date: today
             });
+        if (error) console.error("RateLimit Insert Error:", error);
     }
 }

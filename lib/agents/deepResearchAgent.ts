@@ -59,14 +59,18 @@ Return JSON ONLY:
   ],
   "complexity": "high",
   "standaloneInput": "rewritten user prompt"
-}`;
+}
+
+IMPORTANT: If the user request is simple (e.g. basic math "2+2", greetings, or general knowledge) and does NOT require external research, return "subQueries": [].`;
 
         const messages = [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Query: ${sanitizeInput(params.prompt)}\nHistory: ${formatChatHistory(params.chatHistory)}` }
         ];
 
-        const { text: planJson } = await withRetry(() => generateText({ model: openrouter.chat(pModel), messages: messages as any }));
+        const t0 = Date.now();
+        const { text: planJson, usage: pUsage } = await withRetry(() => generateText({ model: openrouter.chat(pModel), messages: messages as any }));
+        const ms = Date.now() - t0;
         let plan: any;
         try {
             const cleanJson = planJson.replace(/```json|```/g, '').trim();
@@ -75,8 +79,8 @@ Return JSON ONLY:
             plan = { subQueries: [{ query: params.prompt, rationale: 'Fallback plan', source: 'web' }] };
         }
 
-        yield { type: 'step_finish', stepId: pId, output: `Plan: ${plan.subQueries.length} streams`, agent: 'deep-planner', meta: { plan } };
-        await persistStep(scenarioId, { id: pId, agent: 'deep-planner', stepLabel: 'Map Strategy', stepType: 'output', content: planJson }, reqContext);
+        yield { type: 'step_finish', stepId: pId, output: `Plan: ${plan.subQueries.length} streams`, agent: 'deep-planner', meta: { plan }, latencyMs: ms, usage: pUsage };
+        await persistStep(scenarioId, { id: pId, agent: 'deep-planner', stepLabel: 'Map Strategy', stepType: 'output', content: planJson, latencyMs: ms, inputTokens: (pUsage as any)?.promptTokens, outputTokens: (pUsage as any)?.completionTokens }, reqContext);
 
         // 2. PARALLEL EXECUTION (WORKER PHASE)
         const parallelGroupId = crypto.randomUUID();
@@ -126,15 +130,18 @@ Return JSON ONLY:
             Write a concise (max 200 words) summary of the FINDINGS. 
             Focus on facts. Cite urls like [Title](URL).`;
 
-            const { text: summary } = await withRetry(() => generateText({ model: openrouter.chat(rModel), messages: [{ role: 'user', content: summaryPrompt }] }));
+            const wT0 = Date.now();
+            const { text: summary, usage: wUsage } = await withRetry(() => generateText({ model: openrouter.chat(rModel), messages: [{ role: 'user', content: summaryPrompt }] }));
+            const wMs = Date.now() - wT0;
 
             // Persist Summary
             await persistStep(scenarioId, {
                 id: rId, agent: 'worker', stepLabel: `Summary: ${q.rationale}`, stepType: 'output',
-                content: summary, isParallel: true, parallelGroup: parallelGroupId, parallelLabel: branchLabel
+                content: summary, isParallel: true, parallelGroup: parallelGroupId, parallelLabel: branchLabel,
+                latencyMs: wMs, inputTokens: (wUsage as any)?.promptTokens, outputTokens: (wUsage as any)?.completionTokens
             }, reqContext);
 
-            return { query: q.query, summary };
+            return { query: q.query, summary, latencyMs: wMs };
         });
 
         // Execute Parallel
@@ -181,14 +188,37 @@ Synthesize these into a comprehensive answer.
 ${isLabsEnabled ? '**LABS ENABLED**: You may generate python plotting code.' : ''}
 `;
 
-        const { text: finalAns, usage } = await withRetry(() => generateText({ model: openrouter.chat(sModel), messages: [{ role: 'user', content: aggPrompt }] }));
+        if (summaries.length === 0) {
+            // Direct Answer Mode
+            yield { type: 'step_finish', stepId: sid('parallel-skip'), output: 'Task identified as simple. Skipping research.', agent: 'orchestrator' };
+            const aggPromptSimple = `You are a helpful assistant.
+User Goal: "${params.prompt}"
+
+This task was identified as simple and did not require external research.
+Please answer the user's question directly and concisely.`;
+
+            reqContext.modelName = sModel;
+            const sT0 = Date.now();
+            const { text: finalAns, usage: sUsage } = await withRetry(() => generateText({ model: openrouter.chat(sModel), messages: [{ role: 'user', content: aggPromptSimple }] }));
+            const sMs = Date.now() - sT0;
+            yield { type: 'step_finish', stepId: sId, output: finalAns, agent: 'aggregator', usage: sUsage, latencyMs: sMs };
+            await persistStep(scenarioId, {
+                id: sId, agent: 'aggregator', stepLabel: 'Direct Answer', stepType: 'output',
+                content: finalAns, latencyMs: sMs, inputTokens: (sUsage as any)?.promptTokens, outputTokens: (sUsage as any)?.completionTokens
+            }, reqContext);
+            return;
+        }
+
+        const sT0 = Date.now();
+        const { text: finalAns, usage: sUsage } = await withRetry(() => generateText({ model: openrouter.chat(sModel), messages: [{ role: 'user', content: aggPrompt }] }));
+        const sMs = Date.now() - sT0;
         const { reasoning, cleanText } = extractReasoning(finalAns);
 
-        yield { type: 'step_finish', stepId: sId, output: cleanText, agent: 'aggregator', usage, meta: { reasoning } };
+        yield { type: 'step_finish', stepId: sId, output: cleanText, agent: 'aggregator', usage: sUsage, meta: { reasoning }, latencyMs: sMs };
         // yield { type: 'finish', content: cleanText };
         await persistStep(scenarioId, {
             id: sId, agent: 'aggregator', stepLabel: 'Final Report', stepType: 'output',
-            content: finalAns, latencyMs: 0
+            content: finalAns, latencyMs: sMs, inputTokens: (sUsage as any)?.promptTokens, outputTokens: (sUsage as any)?.completionTokens
         }, reqContext);
     }
 }

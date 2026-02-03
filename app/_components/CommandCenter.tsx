@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useAgentStore, AgentStep } from "../_store/useAgentStore";
 import {
-    X, Terminal, MessageSquare, Mic, Send,
-    Activity, ChevronRight, Cpu, FlaskConical, Gauge, Brain, Network
+    Activity, ChevronRight, Cpu, FlaskConical, Gauge, Brain, Network, Copy, Check,
+    X, Terminal, MessageSquare, Mic, Send
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WaterfallPanel } from "./WaterfallPanel";
@@ -89,6 +89,24 @@ export function CommandCenter() {
                         <Terminal size={14} /> Steps
                         <span className="bg-zinc-800 text-zinc-400 px-1 rounded text-[9px]">{steps.length}</span>
                     </button>
+                    {activeTab === 'telemetry' && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(JSON.stringify(steps, null, 2));
+                                const btn = e.currentTarget;
+                                const originalIcon = btn.innerHTML;
+                                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check text-green-500"><path d="M20 6 9 17l-5-5"/></svg>';
+                                setTimeout(() => {
+                                    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+                                }, 2000);
+                            }}
+                            className="ml-1 w-6 h-6 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 rounded transition-all"
+                            title="Copy Steps JSON"
+                        >
+                            <Copy size={12} />
+                        </button>
+                    )}
                     <button
                         onClick={() => setActiveTab('metrics')}
                         className={cn(
@@ -336,11 +354,11 @@ export function CommandCenter() {
 
                                     <span className={cn(
                                         "px-1.5 py-0.5 rounded-[4px] text-[8px] font-black tracking-tighter uppercase shrink-0",
-                                        log.agent === 'planner' ? "text-amber-400 bg-amber-950/30 border border-amber-500/20" :
-                                            log.agent === 'executor' ? "text-red-400 bg-red-950/30 border border-red-500/20" :
-                                                log.agent === 'researcher' ? "text-blue-400 bg-blue-950/30 border border-blue-500/20" :
+                                        log.agent === 'planner' || log.agent === 'deep-planner' ? "text-amber-400 bg-amber-950/30 border border-amber-500/20" :
+                                            log.agent === 'executor' || log.agent === 'orchestrator' ? "text-red-400 bg-red-950/30 border border-red-500/20" :
+                                                log.agent === 'researcher' || log.agent === 'worker' ? "text-blue-400 bg-blue-950/30 border border-blue-500/20" :
                                                     log.agent === 'analyst' ? "text-purple-400 bg-purple-950/30 border border-purple-500/20" :
-                                                        log.agent === 'synthesizer' ? "text-[#CAFF58] bg-[#CAFF58]/10 border border-[#CAFF58]/20" :
+                                                        log.agent === 'synthesizer' || log.agent === 'aggregator' ? "text-[#CAFF58] bg-[#CAFF58]/10 border border-[#CAFF58]/20" :
                                                             "text-zinc-400 bg-zinc-900 border border-zinc-800"
                                     )}>
                                         {log.agent?.toUpperCase() || 'SYSTEM'}

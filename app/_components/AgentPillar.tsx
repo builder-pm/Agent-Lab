@@ -11,6 +11,7 @@ const AGENT_ICONS: any = {
     analyst: Activity,
     synthesizer: Cpu,
     executor: Play,
+    router: LayoutTemplate,
 };
 
 const AGENT_COLORS: any = {
@@ -19,6 +20,7 @@ const AGENT_COLORS: any = {
     analyst: "text-purple-400",
     synthesizer: "text-primary",
     executor: "text-zinc-400",
+    router: "text-zinc-400",
 };
 
 interface AgentPillarProps {
@@ -29,8 +31,8 @@ interface AgentPillarProps {
 }
 
 export const AgentPillar = ({ agentId, isActive, onClickConfig, compact }: AgentPillarProps) => {
-    const Icon = AGENT_ICONS[agentId.replace('deep-', '').replace('worker', 'researcher').replace('aggregator', 'synthesizer').replace('orchestrator', 'executor')] || Play;
-    const colorClass = AGENT_COLORS[agentId.replace('deep-', '').replace('worker', 'researcher').replace('aggregator', 'synthesizer').replace('orchestrator', 'executor')] || "text-zinc-400";
+    const Icon = AGENT_ICONS[agentId.replace('deep-', '').replace('worker', 'researcher').replace('aggregator', 'synthesizer').replace('orchestrator', 'executor')] || AGENT_ICONS[agentId];
+    const colorClass = AGENT_COLORS[agentId.replace('deep-', '').replace('worker', 'researcher').replace('aggregator', 'synthesizer').replace('orchestrator', 'executor')] || AGENT_COLORS[agentId] || "text-zinc-400";
 
     return (
         <div
@@ -45,7 +47,7 @@ export const AgentPillar = ({ agentId, isActive, onClickConfig, compact }: Agent
                 compact ? "w-8 h-8" : "w-12 h-12",
                 isActive ? "bg-white/5 shadow-[0_0_15px_rgba(255,255,255,0.05)]" : "bg-transparent"
             )}>
-                <Icon size={compact ? 16 : 24} className={cn(colorClass, isActive && "animate-pulse drop-shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]")} />
+                <Icon suppressHydrationWarning={true} size={compact ? 16 : 24} className={cn(colorClass, isActive && "animate-pulse drop-shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]")} />
             </div>
 
             <span className={cn(
@@ -67,7 +69,7 @@ export const AgentPillar = ({ agentId, isActive, onClickConfig, compact }: Agent
                 )}
                 title="Configure Agent"
             >
-                <Settings size={12} />
+                <Settings suppressHydrationWarning={true} size={12} />
             </button>
         </div>
     );

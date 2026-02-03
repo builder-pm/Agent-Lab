@@ -68,6 +68,7 @@ function parsePlanOutput(planText: string, fallbackPrompt: string) {
     const searchMatch = planText.match(/\*\*SEARCH_QUERY:\*\*\s*(.+)/i) || planText.match(/SEARCH_QUERY:\s*(.+)/i);
     const scrapeMatch = planText.match(/\*\*SCRAPE_URL:\*\*\s*(.+)/i) || planText.match(/SCRAPE_URL:\s*(.+)/i);
     const analysisMatch = planText.match(/\*\*NEEDS_ANALYSIS:\*\*\s*(yes|no)/i) || planText.match(/NEEDS_ANALYSIS:\s*(yes|no)/i);
+    const complexityMatch = planText.match(/\*\*COMPLEXITY:\*\*\s*(Simple|Complex)/i) || planText.match(/COMPLEXITY:\s*(Simple|Complex)/i);
     const focusAreasMatch = planText.match(/## Focus Areas\s*([\s\S]*?)(?=##|$)/i);
     const focusAreas = focusAreasMatch ? focusAreasMatch[1].split('\n').filter(line => line.trim().startsWith('-')).map(l => l.replace(/^-\s*/, '').trim()) : [];
     const approachMatch = planText.match(/## Approach\s*([\s\S]*?)(?=##|$)/i);
@@ -75,11 +76,21 @@ function parsePlanOutput(planText: string, fallbackPrompt: string) {
     const scrapeUrl = scrapeMatch ? scrapeMatch[1].trim() : 'none';
     const urlInScrape = scrapeUrl.match(URL_PATTERN);
 
+    // Smart Defaults: If Search Query is literally "none", forced Complexity to Simple unless Analysis is needed
+    let complexity = complexityMatch ? complexityMatch[1] : 'Complex';
+    const searchQuery = searchMatch ? searchMatch[1].trim() : fallbackPrompt;
+    const needsAnalysis = analysisMatch ? analysisMatch[1].toLowerCase() === 'yes' : ANALYSIS_PATTERN.test(fallbackPrompt);
+
+    if (searchQuery.toLowerCase() === 'none' && !needsAnalysis) {
+        complexity = 'Simple';
+    }
+
     return {
-        searchQuery: searchMatch ? searchMatch[1].trim() : fallbackPrompt,
+        searchQuery,
         needsScrape: !!urlInScrape,
         scrapeUrl: urlInScrape ? urlInScrape[0] : null,
-        needsAnalysis: analysisMatch ? analysisMatch[1].toLowerCase() === 'yes' : ANALYSIS_PATTERN.test(fallbackPrompt),
+        needsAnalysis,
+        complexity,
         focusAreas,
         approach: approachMatch ? approachMatch[1].trim() : '',
         expectedOutput: expectedMatch ? expectedMatch[1].trim() : '',
@@ -102,7 +113,7 @@ export class LinearAgent implements AgentInterface {
 
     async *stream(params: { prompt: string; chatHistory: any[] }): AsyncGenerator<AgentEvent, void, unknown> {
         const { isLabsEnabled, agentMode, agentConfigs } = this.config;
-        const executionMode = agentMode === 'linear' && (QUICK_PATTERN.test(params.prompt)) ? 'turbo' : 'linear';
+        const executionMode = agentMode === 'linear' ? 'linear' : 'deep'; // Simplified, router handles turbo now
         const scenarioId = this.config.scenarioId || '';
 
         // Context Setup
@@ -115,30 +126,70 @@ export class LinearAgent implements AgentInterface {
         // 1. DATABASE INIT (Assumption: Scenario created by factory or passed in)
         if (!scenarioId) throw new Error('ScenarioID required for LinearAgent');
 
-        // 2. PLANNER
+        // 2. ROUTER & PLANNER
         const pId = sid('planner');
         let plan: any;
-        const isQuick = executionMode === 'turbo';
+        let isSimplePath = false;
 
-        if (isQuick) {
-            const intent = classifyIntent(params.prompt);
+        // ROUTER STEP
+        const rId = sid('router');
+        const routerModel = pickModel('planner', this.config);
+        yield { type: 'step_start', stepId: rId, input: 'Routing...', agent: 'router', meta: { modelInfo: { name: routerModel } } };
+
+        const routerPrompt = `You are an intent classifier. Determine if the user's query requires external research or can be answered directly.
+Rules:
+- "Simple": Greetings, basic math, creative writing, roleplay, or general knowledge that DOES NOT require up-to-date info.
+- "Research": Queries asking for facts, news, comparisons, documentation, or specific data.
+
+Return JSON ONLY:
+{ "type": "simple" | "research", "reasoning": "brief explanation" }`;
+
+        const routerMessages = [
+            { role: 'system', content: routerPrompt },
+            { role: 'user', content: sanitizeInput(params.prompt) }
+        ];
+
+        let routeResult = { type: 'research', reasoning: 'Fallback' };
+        try {
+            const { text: rText } = await withRetry(() => generateText({ model: openrouter.chat(routerModel), messages: routerMessages as any }));
+            const jsonMatch = rText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                routeResult = JSON.parse(jsonMatch[0]);
+            }
+        } catch (e) {
+            console.error('Router failed', e);
+        }
+
+        yield { type: 'step_finish', stepId: rId, output: `Classified as: ${routeResult.type.toUpperCase()}`, agent: 'router', meta: { reasoning: routeResult.reasoning }, latencyMs: 0 };
+
+        if (routeResult.type === 'simple') {
+            isSimplePath = true;
             plan = {
-                searchQuery: intent.searchQuery, needsScrape: intent.needsScrape, scrapeUrl: intent.scrapeUrl,
-                needsAnalysis: intent.needsAnalysis, planText: 'Fast Route', isQuick: true, focusAreas: [], approach: '',
+                searchQuery: 'none', needsScrape: false, scrapeUrl: null,
+                needsAnalysis: false, planText: 'Simple Query - Direct Response',
+                complexity: 'Simple', focusAreas: [], approach: 'Direct Answer',
             };
             yield { type: 'step_start', stepId: pId, input: params.prompt, agent: 'planner', isFastRoute: true };
-            yield { type: 'step_finish', stepId: pId, output: plan.planText, agent: 'planner', latencyMs: 0 };
+            yield { type: 'step_finish', stepId: pId, output: 'Skipping detailed planning for simple query.', agent: 'planner', latencyMs: 0 };
             await persistStep(scenarioId, { id: pId, agent: 'planner', stepLabel: 'Fast Route', stepType: 'output', content: plan.planText, latencyMs: 0 }, reqContext);
         } else {
+
             const pModel = pickModel('planner', this.config);
             reqContext.modelName = pModel;
             yield { type: 'step_start', stepId: pId, input: params.prompt, agent: 'planner', meta: { modelInfo: { name: pModel } } };
 
             const systemPrompt = agentConfigs?.planner?.systemPrompt || `You are a strategic research planner. Analyze the user's query and create a detailed execution plan.
 Your plan MUST include these structured fields at the top (one per line, exactly as shown):
-**SEARCH_QUERY:** <an optimized web search query>
+**SEARCH_QUERY:** <an optimized web search query or "none">
 **SCRAPE_URL:** <URL if provided, otherwise "none">
 **NEEDS_ANALYSIS:** <yes or no>
+**COMPLEXITY:** <Simple or Complex>
+
+**COMPLEXITY:** <Simple or Complex>
+
+Rules for COMPLEXITY:
+- "Simple": General knowledge, greetings, math (e.g. "2+2"), definitions, or direct questions not needing web search. MUST Set SEARCH_QUERY to "none".
+- "Complex": Requires up-to-date info, data comparison, fact-checking, or deep explanation.
 
 CRITICAL: You must use <think> tags to capture your reasoning process before generating the JSON plan. Example:
 <think>
@@ -174,36 +225,89 @@ Describe the ideal answer format.`;
         }
 
         // Pipeline Logic
-        const pipeline = ['researcher'];
-        if ((plan.needsAnalysis || isLabsEnabled) && !isQuick) pipeline.push('analyst');
+        let pipeline = ['researcher'];
+
+        // Short-Circuit for Simple Queries (Planner Driven)
+        let isSimple = plan.complexity === 'Simple';
+        if (isSimple) {
+            pipeline = []; // Skip Researcher/Analyst
+            yield { type: 'step_start', stepId: sid('router'), input: 'Routing...', agent: 'router', isFastRoute: true };
+            yield { type: 'step_finish', stepId: sid('router'), output: 'SHORT_CIRCUIT: Simple Query identified. Skipping Research.', agent: 'router', latencyMs: 0 };
+        } else {
+            // Standard Pipeline
+            if ((plan.needsAnalysis || isLabsEnabled) && executionMode !== 'linear') pipeline.push('analyst');
+        }
         pipeline.push('synthesizer');
 
         // ROUTING
-        const eId1 = sid('executor');
-        yield { type: 'step_start', stepId: eId1, input: 'Routing...', agent: 'executor', isFastRoute: true };
-        yield { type: 'step_finish', stepId: eId1, output: 'RESEARCHER', agent: 'executor', latencyMs: 0 };
-        await persistStep(scenarioId, { id: eId1, agent: 'executor', stepLabel: 'Routing', stepType: 'action', content: 'RESEARCHER', latencyMs: 0 }, reqContext);
-
-        // 3. RESEARCHER
-        const rId = sid('researcher');
-        const rModel = pickModel('researcher', this.config);
-        reqContext.modelName = rModel;
-        yield { type: 'step_start', stepId: rId, input: 'Researching...', agent: 'researcher', meta: { input: plan.searchQuery || params.prompt, modelInfo: { name: rModel } } };
-
-        let toolData = '';
-        if (plan.needsScrape && plan.scrapeUrl) {
-            yield { type: 'tool_call', tool: 'jina_scraper', args: { url: plan.scrapeUrl }, stepId: rId, agent: 'researcher' };
-            const res = await jinaScrape(plan.scrapeUrl);
-            yield { type: 'tool_result', tool: 'jina_scraper', result: res, stepId: rId, agent: 'researcher' };
-            toolData = `[SCRAPED ${plan.scrapeUrl}]:\nTitle: ${res.title}\n${(res.markdown || '').slice(0, 4000)}\n`;
-        } else {
-            yield { type: 'tool_call', tool: 'jina_search', args: { query: plan.searchQuery }, stepId: rId, agent: 'researcher' };
-            const res = await jinaSearch(plan.searchQuery);
-            yield { type: 'tool_result', tool: 'jina_search', result: res, stepId: rId, agent: 'researcher' };
-            toolData = res.map((r: any, i: number) => `${i + 1}. ${r.title} — ${r.url}\n   ${r.description}`).join('\n') + '\n';
+        if (!isSimple) {
+            const eId1 = sid('executor');
+            yield { type: 'step_start', stepId: eId1, input: 'Routing...', agent: 'router', isFastRoute: true };
+            yield { type: 'step_finish', stepId: eId1, output: 'RESEARCHER', agent: 'router', latencyMs: 0 };
+            await persistStep(scenarioId, { id: eId1, agent: 'executor', stepLabel: 'Routing', stepType: 'action', content: 'RESEARCHER', latencyMs: 0 }, reqContext);
         }
 
-        const rSystemPrompt = agentConfigs?.researcher?.systemPrompt || `You are a research assistant. Extract relevant facts.
+        // 3. RESEARCHER
+        let retries = 0;
+        const MAX_RETRIES = 1;
+
+        while (pipeline.includes('researcher')) {
+            const rId = sid(retries > 0 ? 'researcher-retry' : 'researcher');
+            const rModel = pickModel('researcher', this.config);
+            reqContext.modelName = rModel;
+
+            // Check if we need to replan (Feedback Loop)
+            // ... (Logic handled inside the loop via break/continue)
+
+            yield { type: 'step_start', stepId: rId, input: 'Researching...', agent: 'researcher', meta: { input: plan.searchQuery || params.prompt, modelInfo: { name: rModel } } };
+
+            let toolData = '';
+            if (plan.needsScrape && plan.scrapeUrl) {
+                yield { type: 'tool_call', tool: 'jina_scraper', args: { url: plan.scrapeUrl }, stepId: rId, agent: 'researcher' };
+                const res = await jinaScrape(plan.scrapeUrl);
+                yield { type: 'tool_result', tool: 'jina_scraper', result: res, stepId: rId, agent: 'researcher' };
+                toolData = `[SCRAPED ${plan.scrapeUrl}]:\nTitle: ${res.title}\n${(res.markdown || '').slice(0, 4000)}\n`;
+            } else {
+                yield { type: 'tool_call', tool: 'jina_search', args: { query: plan.searchQuery }, stepId: rId, agent: 'researcher' };
+                const res = await jinaSearch(plan.searchQuery);
+                yield { type: 'tool_result', tool: 'jina_search', result: res, stepId: rId, agent: 'researcher' };
+                toolData = res.map((r: any, i: number) => `${i + 1}. ${r.title} — ${r.url}\n   ${r.description}`).join('\n') + '\n';
+            }
+
+            // FEEDBACK LOOP: Check for bad data
+            const isDataPoor = toolData.length < 50 || toolData.includes('Title: Search Error') || (toolData.includes('No title') && toolData.length < 100);
+
+            if (isDataPoor && retries < MAX_RETRIES) {
+                retries++;
+                yield { type: 'step_finish', stepId: rId, output: 'Result appears insufficient. Triggering Replanning...', agent: 'executor', latencyMs: 0, meta: { reasoning: 'Initial search yielded poor results.' } };
+
+                // REPLANNING STEP
+                const replanId = sid('re-planner');
+                const replanPrompt = `Previous plan for "${params.prompt}" failed using query "${plan.searchQuery}". Result was: ${toolData.slice(0, 100)}...
+    Create a NEW, BETTER plan.
+    **SEARCH_QUERY:** <new query>
+    **SCRAPE_URL:** <none>
+    **NEEDS_ANALYSIS:** <yes/no>
+    **COMPLEXITY:** Complex`;
+
+                yield { type: 'step_start', stepId: replanId, input: 'Replanning due to poor data...', agent: 'planner' };
+
+                const { text: newPlanText } = await withRetry(() => generateText({
+                    model: openrouter.chat(pickModel('planner', this.config)),
+                    messages: [{ role: 'system', content: 'You are a strategic planner. Recovery mode.' }, { role: 'user', content: replanPrompt }] as any
+                }));
+
+                const newParsed = parsePlanOutput(newPlanText, params.prompt);
+                plan = { ...newParsed, planText: newPlanText, isQuick: false };
+                yield { type: 'step_finish', stepId: replanId, output: newPlanText, agent: 'planner', latencyMs: 0 };
+
+                // Continue loop to retry research with new plan
+                continue;
+            }
+
+            // Proceed if data is good or max retries reached logic below...
+
+            const rSystemPrompt = agentConfigs?.researcher?.systemPrompt || `You are a research assistant. Extract relevant facts.
 Rules:
 1. Cite sources [Source Title](URL)
 2. Use bullets
@@ -211,25 +315,29 @@ Rules:
 4. State if data is missing
 5. Use <think> tags to plan your extraction strategy.`;
 
-        let contextSection = '';
-        if (plannerOutput && (plannerOutput.focusAreas.length > 0 || plannerOutput.approach)) {
-            contextSection = `\n\nFocus Areas:\n${plannerOutput.focusAreas.join('\n')}\nStrategy: ${plannerOutput.approach}`;
+            let contextSection = '';
+            if (plannerOutput && (plannerOutput.focusAreas.length > 0 || plannerOutput.approach)) {
+                contextSection = `\n\nFocus Areas:\n${plannerOutput.focusAreas.join('\n')}\nStrategy: ${plannerOutput.approach}`;
+            }
+
+            const rMessages = [
+                { role: 'system', content: rSystemPrompt },
+                { role: 'user', content: `Raw Data:\n${truncateToLimit(toolData, 20000)}${contextSection}\n\nOriginal Question: ${sanitizeInput(params.prompt)}\n\nProvide findings.` }
+            ];
+
+            const rT0 = Date.now();
+            const { text: rText, usage: rUsage } = await withRetry(() => generateText({ model: openrouter.chat(rModel), messages: rMessages as any }));
+            const rMs = Date.now() - rT0;
+            const { reasoning: rReason, cleanText: rClean } = extractReasoning(rText);
+            const rReasonTokens = rReason ? Math.ceil(rReason.length / 4) : 0;
+
+            yield { type: 'step_finish', stepId: rId, output: rClean, agent: 'researcher', latencyMs: rMs, usage: rUsage, meta: { reasoning: rReason, reasoningTokens: rReasonTokens } };
+            await persistStep(scenarioId, { id: rId, agent: 'researcher', stepLabel: 'Research', stepType: 'output', content: rText, latencyMs: rMs, promptConsumed: JSON.stringify(rMessages), inputTokens: (rUsage as any)?.promptTokens, outputTokens: (rUsage as any)?.completionTokens }, reqContext);
+            researcherOutput = rText;
+
+            // Break the loop if successful
+            break;
         }
-
-        const rMessages = [
-            { role: 'system', content: rSystemPrompt },
-            { role: 'user', content: `Raw Data:\n${truncateToLimit(toolData, 20000)}${contextSection}\n\nOriginal Question: ${sanitizeInput(params.prompt)}\n\nProvide findings.` }
-        ];
-
-        const rT0 = Date.now();
-        const { text: rText, usage: rUsage } = await withRetry(() => generateText({ model: openrouter.chat(rModel), messages: rMessages as any }));
-        const rMs = Date.now() - rT0;
-        const { reasoning: rReason, cleanText: rClean } = extractReasoning(rText);
-        const rReasonTokens = rReason ? Math.ceil(rReason.length / 4) : 0;
-
-        yield { type: 'step_finish', stepId: rId, output: rClean, agent: 'researcher', latencyMs: rMs, usage: rUsage, meta: { reasoning: rReason, reasoningTokens: rReasonTokens } };
-        await persistStep(scenarioId, { id: rId, agent: 'researcher', stepLabel: 'Research', stepType: 'output', content: rText, latencyMs: rMs, promptConsumed: JSON.stringify(rMessages), inputTokens: (rUsage as any)?.promptTokens, outputTokens: (rUsage as any)?.completionTokens }, reqContext);
-        researcherOutput = rText;
 
         // 4. ANALYST
         if (pipeline.includes('analyst')) {

@@ -23,7 +23,7 @@ export async function logActivity({
 
     try {
         await supabase
-            .from('agentlab.user_activity')
+            .from('user_activity')
             .insert({
                 user_id: userId,
                 ip_address: ipAddress,

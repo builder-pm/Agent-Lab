@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Space_Mono } from "next/font/google";
-import { GlobalSidebar } from "@/components/GlobalSidebar";
+import { SidebarWrapper } from "@/components/SidebarWrapper";
 import { AuthProvider } from "./_context/AuthContext";
 import Script from 'next/script';
 import "./globals.css";
@@ -27,7 +27,7 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en">
+        <html lang="en" suppressHydrationWarning>
             <head>
                 <link rel="icon" href="/logo.svg" type="image/svg+xml" />
                 <Script
@@ -47,7 +47,7 @@ export default function RootLayout({
                 className={`${spaceGrotesk.variable} ${spaceMono.variable} antialiased flex h-screen w-screen bg-[#0c0c0e] text-foreground`}
             >
                 <AuthProvider>
-                    <GlobalSidebar />
+                    <SidebarWrapper />
                     <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                         {children}
                     </div>
